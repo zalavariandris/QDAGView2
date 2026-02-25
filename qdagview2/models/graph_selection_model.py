@@ -1,0 +1,136 @@
+from typing import *
+import logging
+from enum import Enum
+from dataclasses import dataclass
+
+from qtpy.QtGui import *
+from qtpy.QtCore import *
+from qtpy.QtWidgets import *
+
+from qdagview2.models.abstract_graph_model import AbstractGraphModel
+from qdagview2.models.graph_references import NodeRef, OutletRef, InletRef, LinkRef
+
+logger = logging.getLogger(__name__)
+
+
+class GraphSelectionModel(QObject):
+    """
+    """
+
+    selectionChanged = Signal(list, list) # (selected, deselected_)
+    currentChanged = Signal(object, object) # (current, previous) type: NodeRef|LinkRef|None since current index can be invalid, and we don't want to force users to check for validity of the index before accessing the current item
+    modelChanged = Signal() # emitted when the underlying graph model changes, so views can update their selection state if needed
+
+    def __init__(self, graph_model:AbstractGraphModel|None=None, parent:QObject|None=None):
+        super().__init__(parent)
+        self._graph_model: AbstractGraphModel | None = None
+        self._selected_items: List[NodeRef|LinkRef] = []
+        self._current_item: NodeRef|LinkRef|None = None
+        if graph_model is not None:
+            self.setGraphModel(graph_model)
+
+    def isSelected(self, index:NodeRef|LinkRef) -> bool:
+        return index in self._selected_items
+    
+    def hasSelection(self) -> bool:
+        return len(self._selected_items) > 0
+        
+    def setGraphModel(self, graph_model:AbstractGraphModel):
+        """Set the graph model to use.
+
+        This will clear the current selection and disconnect from any previous graph model and its source selection model.
+        """
+        self._graph_model = graph_model
+        self._graph_model.linksAboutToBeRemoved.connect(self.onLinksAboutToBeRemoved)
+        self._graph_model.nodesAboutToBeRemoved.connect(self.onNodesAboutToBeRemoved)
+        
+        self.clearSelection()
+
+    def graphModel(self) -> AbstractGraphModel|None:
+        return self._graph_model
+
+    def onNodesAboutToBeRemoved(self, node_refs:List[NodeRef]):
+        # Deselect any nodes that are about to be removed
+        deselected_nodes = []
+        for node in node_refs:
+            if node in self._selected_items:
+                self._selected_items.remove(node)
+                deselected_nodes.append(node)
+
+        # if len(deselected_nodes) > 0: # TODO: review, if we should emit selectionChanged. check QItemSelectionModel behavior
+        #     self.selectionChanged.emit([], deselected_nodes)
+
+    def onLinksAboutToBeRemoved(self, link_refs:List[LinkRef]):
+        # Deselect any links that are about to be removed
+        deselected_links = []
+        for link in link_refs:
+            if link in self._selected_items:
+                self._selected_items.remove(link)
+                deselected_links.append(link)
+
+        # if len(deselected_links) > 0: # TODO: review, if we should emit selectionChanged. check QItemSelectionModel behavior
+        #     self.selectionChanged.emit([], deselected_links)
+
+
+        
+    def selectedIndexes(self) -> List[NodeRef|LinkRef]:
+        return self._selected_items
+
+    def select(self, selection:list, command:QItemSelectionModel.SelectionFlag=QItemSelectionModel.SelectionFlag.Select):
+        # Store old selection for comparison
+        print(f"Selection command: {command}, selection: {selection}, command flags: {QItemSelectionModel.SelectionFlag(command)}")
+        # Apply selection logic
+        deselected_items:list = list()
+        selected_items:list = list()
+
+        # Clear old selection if requested
+        if command & QItemSelectionModel.SelectionFlag.Clear:
+            for idx in self._selected_items:
+                deselected_items.append(idx)
+            self._selected_items = list() # clear selection by creating a new empty selection object, to preserve any references to the old selection object that may be held by views or other models
+            # self.selectionChanged.emit(set(), old_selection)
+            # return
+        
+        if command & QItemSelectionModel.SelectionFlag.Select:
+            for idx in selection:
+                if idx not in self._selected_items:
+                    self._selected_items.append(idx)
+                    selected_items.append(idx)
+
+        elif command & QItemSelectionModel.SelectionFlag.Deselect:
+            for idx in selection:
+                if idx in self._selected_items:
+                    self._selected_items.remove(idx)
+                    deselected_items.append(idx)
+
+        elif command & QItemSelectionModel.SelectionFlag.Toggle:
+            for idx in selection:
+                if idx in self._selected_items:
+                    self._selected_items.remove(idx)
+                    deselected_items.append(idx)
+                else:
+                    self._selected_items.append(idx)
+                    selected_items.append(idx)
+
+        # Update current if requested
+        if command & QItemSelectionModel.SelectionFlag.Current and len(selection) > 0:
+            self.setCurrentIndex(selection[0])
+        
+        # Emit selectionChanged signal if selection actually changed
+        if len(selected_items)>0 or len(deselected_items)>0:
+            self.selectionChanged.emit(selected_items, deselected_items)
+
+    def clearSelection(self):
+        if len(self._selected_items) > 0:
+            deselected_items = self._selected_items.copy()
+            self._selected_items = []
+            self.selectionChanged.emit([], deselected_items)
+
+        self.setCurrentIndex(None)
+
+    def currentIndex(self) -> NodeRef|None:
+        return self._current_item
+
+    def setCurrentIndex(self, index:NodeRef|None, command:QItemSelectionModel.SelectionFlag=QItemSelectionModel.SelectionFlag.Current):
+        self._current_item = index
+        
