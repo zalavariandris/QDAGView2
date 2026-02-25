@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import weakref
+
+from qdagview2.models.graph_references import AttributeRef
 logger = logging.getLogger(__name__)
 
 from typing import *
@@ -136,18 +138,18 @@ class GraphWidgetFactory(QObject):
         # Schedule widget for deletion to prevent memory leaks
         widget.deleteLater()
 
-    def createCellWidget(self, parent_widget: NodeWidget|OutletWidget|InletWidget|LinkWidget, index: Hashable, graphview:'GraphView'=None) -> CellWidget:
+    def createCellWidget(self, parent_widget: NodeWidget|OutletWidget|InletWidget|LinkWidget, attribute: AttributeRef, graphview:'GraphView'=None) -> CellWidget:
         if not isinstance(parent_widget, (NodeWidget, OutletWidget, InletWidget, LinkWidget)):
             raise TypeError("Parent widget must be a NodeWidget, PortWidget, or LinkWidget")
         # if not index.isValid():
         #     raise ValueError("Index must be valid")
         
         cell = CellWidget()
-        parent = graphview._graph_model.attributeOwner(index)
-        attributes = graphview._graph_model.attributes(index.owner)
-        pos = attributes.index(index)
+        owner = graphview._graph_model.attributeOwner(attribute)
+        attributes = graphview._graph_model.attributes(owner)
+        pos = attributes.index(attribute)
         if pos == -1:
-            raise ValueError(f"Attribute {index} is not an attribute of {index.owner}")
+            raise ValueError(f"Attribute {attribute} is not an attribute of {owner}")
         parent_widget.insertCell(pos, cell)
         return cell
 

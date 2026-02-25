@@ -23,8 +23,8 @@ class NXGraphModel(AbstractGraphModel):
         new_node_ref = NodeRef(f"n{node_count+1}")
         self.nodesAboutToBeInserted.emit([new_node_ref]) # Emit about-to-be-inserted signal
         self.G.add_node(new_node_ref,
-            inlets=[InletRef(node=new_node_ref, name="inlet")],
-            outlets=[OutletRef(node=new_node_ref, name="outlet")])
+            inlets=[InletRef(new_node_ref, "inlet")],
+            outlets=[OutletRef(new_node_ref, "outlet")])
         self.nodesInserted.emit([new_node_ref]) # TODO: emit correct index
         return new_node_ref
     
@@ -52,7 +52,7 @@ class NXGraphModel(AbstractGraphModel):
     
     def addInlet(self, node:NodeRef) -> InletRef:
         inlets_count = len(self.G.nodes[node]['inlets'])
-        new_inlet_ref = InletRef(node=node, name=f"inlet{inlets_count+1}")
+        new_inlet_ref = InletRef(node, f"inlet{inlets_count+1}")
         self.G.nodes[node]['inlets'].append(new_inlet_ref)
         self.inletsInserted.emit(node, [new_inlet_ref]) # TODO: emit correct index
         return new_inlet_ref
@@ -65,7 +65,7 @@ class NXGraphModel(AbstractGraphModel):
     
     def addOutlet(self, node:NodeRef) -> OutletRef:
         outlets_count = len(self.G.nodes[node]['outlets'])
-        new_outlet_ref = OutletRef(node=node, name=f"outlet{outlets_count+1}")
+        new_outlet_ref = OutletRef(node, f"outlet{outlets_count+1}")
         self.G.nodes[node]['outlets'].append(new_outlet_ref)
         self.outletsInserted.emit(node, [new_outlet_ref]) # TODO: emit correct index
         return new_outlet_ref
@@ -81,7 +81,7 @@ class NXGraphModel(AbstractGraphModel):
             return False
         source_node = self.outletNode(outlet_index)
         target_node = self.inletNode(inlet_index)
-        link_ref = LinkRef(source=outlet_index, target=inlet_index, name=0)
+        link_ref = LinkRef(outlet_index, inlet_index, 0)
         self.linksAboutToBeInserted.emit([link_ref]) # Emit about-to-be-inserted signal
         self.G.add_edge(source_node, target_node, key=(outlet_index, inlet_index)) # use port indexes as edge key to allow multiple edges between same nodes
         self.linksInserted.emit([link_ref]) # TODO: emit correct index
@@ -90,11 +90,11 @@ class NXGraphModel(AbstractGraphModel):
     def removeLink(self, link:LinkRef) -> bool:
         if not link.isValid():
             return False
-        source_node = self.outletNode(link.source)
-        target_node = self.inletNode(link.target)
+        source_node = self.outletNode(link._source)
+        target_node = self.inletNode(link._target)
         try:
             self.linksAboutToBeRemoved.emit([link])
-            self.G.remove_edge(source_node, target_node, key=(link.source, link.target))
+            self.G.remove_edge(source_node, target_node, key=(link._source, link._target))
             self.linksRemoved.emit([link])
             return True
         except KeyError:
@@ -105,15 +105,15 @@ class NXGraphModel(AbstractGraphModel):
             case InletRef():
                 node = self.inletNode(port)
                 in_edges = self.G.in_edges(node, keys=True)
-                return [LinkRef(source=k[0], target=port, name=0) for u, v, k in in_edges if k[1] == port] # count only edges connected to the specific inlet
+                return [LinkRef(k[0], port, 0) for u, v, k in in_edges if k[1] == port] # count only edges connected to the specific inlet
             
             case OutletRef():
                 node = self.outletNode(port)
                 out_edges = self.G.out_edges(node, keys=True)
-                return [LinkRef(source=port, target=k[1], name=0) for u, v, k in out_edges if k[0] == port] # count only edges connected to the specific outlet
+                return [LinkRef(port, k[1], 0) for u, v, k in out_edges if k[0] == port] # count only edges connected to the specific outlet
             
             case None:
-                return [LinkRef(source=k[0], target=k[1], name=0) for u, v, k in self.G.edges(keys=True)]
+                return [LinkRef(k[0], k[1], 0) for u, v, k in self.G.edges(keys=True)]
             
             case _:
                 raise ValueError(f"Invalid port type: {port}")
@@ -122,16 +122,16 @@ class NXGraphModel(AbstractGraphModel):
         return len(self.links(port))
     
     def inletNode(self, inlet:InletRef)->NodeRef:
-        return inlet.node
+        return inlet._node
     
     def outletNode(self, outlet:OutletRef)->NodeRef:
-        return outlet.node
+        return outlet._node
     
     def linkSource(self, link:LinkRef) -> OutletRef:
-        return link.source
+        return link._source
     
     def linkTarget(self, link:LinkRef) -> InletRef:
-        return link.target
+        return link._target
     
     def canLink(self, source_port:OutletRef|InletRef, target_port:OutletRef|InletRef) -> bool:
         # For simplicity, allow linking any outlet to any inlet
@@ -142,13 +142,13 @@ class NXGraphModel(AbstractGraphModel):
     def attributes(self, index:NodeRef|InletRef|OutletRef|LinkRef) -> List[AttributeRef]:
         match index:
             case NodeRef():
-                return [AttributeRef(owner=index, name="name")]
+                return [AttributeRef(index, "name")]
             case InletRef():
-                return [AttributeRef(owner=index, name="name")]
+                return [AttributeRef(index, "name")]
             case OutletRef():
-                return [AttributeRef(owner=index, name="name")]
+                return [AttributeRef(index, "name")]
             case LinkRef():
-                return [AttributeRef(owner=index, name="source"), AttributeRef(owner=index, name="target")]
+                return [AttributeRef(index, "source"), AttributeRef(index, "target")]
             case _:
                 return []
         
@@ -156,31 +156,31 @@ class NXGraphModel(AbstractGraphModel):
         return attribute.owner
 
     def attributeData(self, attribute, role:int=Qt.ItemDataRole.DisplayRole) -> Any:
-        match attribute.owner:
+        match attribute._owner:
             case NodeRef():
-                match attribute.name:
+                match attribute._name:
                     case "name":
-                        return attribute.owner.name
+                        return attribute._owner._name
             case InletRef():
-                match attribute.name:
+                match attribute._name:
                     case "name":
-                        return attribute.owner.name
+                        return attribute._owner._name
             case OutletRef():
-                match attribute.name:
+                match attribute._name:
                     case "name":
-                        return attribute.owner.name
+                        return attribute._owner._name
             case LinkRef():
-                match attribute.name:
+                match attribute._name:
                     case "source":
-                        return f"{attribute.owner.source.node.name}:{attribute.owner.source.name}"
+                        return f"{attribute._owner._source._node._name}:{attribute._owner._source._name}"
                     case "target":
-                        return f"{attribute.owner.target.node.name}:{attribute.owner.target.name}"
+                        return f"{attribute._owner._target._node._name}:{attribute._owner._target._name}"
     
     def setAttributeData(self, attribute, value:Any, role:int=Qt.ItemDataRole.EditRole) -> bool:
         return False
     
     def attributeOwner(self, attribute:AttributeRef)->NodeRef|InletRef|OutletRef|LinkRef:
-        return attribute.owner
+        return attribute._owner
     
     def itemType(self, index:NodeRef|InletRef|OutletRef|LinkRef) -> 'GraphItemType':
         match index:

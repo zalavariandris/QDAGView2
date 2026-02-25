@@ -1,5 +1,6 @@
 from typing import cast, List
 from qtpy.QtGui import *
+from qtpy.QtGui import *
 from qtpy.QtCore import *
 from qtpy.QtWidgets import *
 

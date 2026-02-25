@@ -331,17 +331,23 @@ class GraphView(QGraphicsView):
 
     def handleNodesRemoved(self, node_indexes:List[QPersistentModelIndex]):
         for node_index in node_indexes:
-            self.handleAttributesRemoved(self._graph_model.attributes(node_index))
             self.handleInletsRemoved(self._graph_model.inlets(node_index))
             self.handleOutletsRemoved(self._graph_model.outlets(node_index))
+            self.handleAttributesRemoved(self._graph_model.attributes(node_index))
             self._removeNodeWidgetForIndex(node_index)
 
     def handleInletsRemoved(self, inlet_indexes:List[QPersistentModelIndex]):
         for inlet_index in inlet_indexes:
+            for link in self._graph_model.links(inlet_index):
+                self.handleAttributesRemoved(self._graph_model.attributes(link))
+                self._removeLinkWidgetForIndex(link)
             self._removeInletWidgetForIndex(inlet_index)
 
     def handleOutletsRemoved(self, outlet_indexes:List[QPersistentModelIndex]):
         for outlet_index in outlet_indexes:
+            for link in self._graph_model.links(outlet_index):
+                self.handleAttributesRemoved(self._graph_model.attributes(link))
+                self._removeLinkWidgetForIndex(link)
             self._removeOutletWidgetForIndex(outlet_index)
 
     def handleLinksRemoved(self, link_indexes:List[QPersistentModelIndex]):

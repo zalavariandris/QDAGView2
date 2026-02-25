@@ -12,8 +12,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "qtpy",
-    "pyqt6",
-    "networkx"
+    "pyqt6", # Todo: can we move to pyside6?
+    "networkx",
+    "bidict"
 ]
 
 [tool.setuptools]
