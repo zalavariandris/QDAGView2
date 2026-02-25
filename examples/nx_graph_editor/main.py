@@ -74,7 +74,7 @@ class MainWindow(QWidget):
         self.log.setReadOnly(True)
 
         # setup layout
-        layout = QVBoxLayout(self)
+        layout = QHBoxLayout(self)
         layout.setMenuBar(self.toolbar)
         layout.addWidget(self.graphview1)
         layout.addWidget(self.graphview2)
