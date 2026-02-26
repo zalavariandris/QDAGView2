@@ -29,27 +29,31 @@ class AbstractGraphModel(QObject, ABC, metaclass=QABCMeta):
     all nodes, links, and ports must be a uniquely identifiable.
     """
 
-    nodesInserted =   Signal(list) # list of QPersistentModelIndex
-    inletsInserted =  Signal(list) # list of QPersistentModelIndex
-    outletsInserted = Signal(list) # list of QPersistentModelIndex
-    linksInserted =   Signal(list) # list of QPersistentModelIndex
+    nodesInserted =   Signal(list) # list of NodeRef
+    inletsInserted =  Signal(list) # list of InletRef
+    outletsInserted = Signal(list) # list of OutletRef
+    linksInserted =   Signal(list) # list of LinkRef
+    attributesInserted = Signal(list) # list of AttributeRef
 
-    nodesAboutToBeInserted =   Signal(list) # list of QPersistentModelIndex
-    inletsAboutToBeInserted =  Signal(list) # list of QPersistentModelIndex
-    outletsAboutToBeInserted = Signal(list) # list of QPersistentModelIndex
-    linksAboutToBeInserted =   Signal(list) # list of QPersistentModelIndex
+    nodesAboutToBeInserted =   Signal(list) # list of NodeRef
+    inletsAboutToBeInserted =  Signal(list) # list of InletRef
+    outletsAboutToBeInserted = Signal(list) # list of OutletRef
+    linksAboutToBeInserted =   Signal(list) # list of LinkRef
+    attributesAboutToBeInserted = Signal(list) # list of AttributeRef
 
-    nodesAboutToBeRemoved =   Signal(list) # list of QPersistentModelIndex
-    inletsAboutToBeRemoved =  Signal(list) # list of QPersistentModelIndex
-    outletsAboutToBeRemoved = Signal(list) # list of QPersistentModelIndex
-    linksAboutToBeRemoved =   Signal(list) # list of QPersistentModelIndex
+    nodesAboutToBeRemoved =   Signal(list) # list of NodeRef
+    inletsAboutToBeRemoved =  Signal(list) # list of InletRef
+    outletsAboutToBeRemoved = Signal(list) # list of OutletRef
+    linksAboutToBeRemoved =   Signal(list) # list of LinkRef
+    attributesAboutToBeRemoved = Signal(list) # list of AttributeRef
 
-    nodesRemoved =   Signal(list) # list of QPersistentModelIndex
-    inletsRemoved =  Signal(list) # list of QPersistentModelIndex
-    outletsRemoved = Signal(list) # list of QPersistentModelIndex
-    linksRemoved =   Signal(list) # list of QPersistentModelIndex
+    nodesRemoved =   Signal(list) # list of NodeRef
+    inletsRemoved =  Signal(list) # list of InletRef
+    outletsRemoved = Signal(list) # list of OutletRef
+    linksRemoved =   Signal(list) # list of LinkRef
+    attributesRemoved = Signal(list) # list of AttributeRef
 
-    attributesDataChanged = Signal(list, list) # list of QPersistentModelIndex, list of roles
+    attributesDataChanged = Signal(list, list) # list of AttributeRef, list of roles
 
     def __init__(self, parent: QObject | None=None):
         super().__init__(parent)
@@ -215,7 +219,7 @@ class AbstractGraphModel(QObject, ABC, metaclass=QABCMeta):
         """
         return len(self.links(port))
     
-    def addAttribute(self, owner:NodeRef|InletRef|OutletRef|LinkRef, name:str) -> AttributeRef:
+    def addAttribute(self, owner:NodeRef|InletRef|OutletRef|LinkRef) -> AttributeRef:
         """
         Add a new attribute to the given owner (node, port, or link).
         Returns the _AttributeId_ of the newly added attribute.

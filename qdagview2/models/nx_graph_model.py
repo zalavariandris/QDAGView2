@@ -10,6 +10,7 @@ from qtpy.QtGui import *
 # from qdagview.core import GraphDataRole, GraphItemType
 
 from qdagview2.graph_item_types import GraphItemType
+from qdagview2.utils import unique
 
 class NXGraphModel(AbstractGraphModel):
     def __init__(self, parent=None):
@@ -19,10 +20,11 @@ class NXGraphModel(AbstractGraphModel):
     def addNode(self, subgraph=None) -> NodeRef:
         if subgraph is not None:
             raise NotImplementedError("Subgraph support is not implemented in this example")
-        node_count = len(self.G.nodes)
-        new_node_ref = NodeRef(f"n{node_count+1}")
+        
+        node_name = unique.make_unique_name("n", (n for n in self.G.nodes))
+        new_node_ref = NodeRef(node_name)
         self.nodesAboutToBeInserted.emit([new_node_ref]) # Emit about-to-be-inserted signal
-        self.G.add_node(new_node_ref,
+        self.G.add_node(node_name,
             inlets=[InletRef(new_node_ref, "inlet")],
             outlets=[OutletRef(new_node_ref, "outlet")])
         self.nodesInserted.emit([new_node_ref]) # TODO: emit correct index
@@ -33,7 +35,7 @@ class NXGraphModel(AbstractGraphModel):
             return False
         try:
             self.nodesAboutToBeRemoved.emit([node])
-            self.G.remove_node(node)
+            self.G.remove_node(node._name)
             self.nodesRemoved.emit([node])
             return True
         except KeyError:
@@ -42,7 +44,7 @@ class NXGraphModel(AbstractGraphModel):
     def nodes(self, subgraph=None):
         if subgraph is not None:
             raise NotImplementedError("Subgraph support is not implemented in this example")
-        return [n for n in self.G.nodes()]
+        return [NodeRef(n) for n in self.G.nodes()]
 
     def nodeCount(self, subgraph = None):
         if subgraph is not None:
@@ -53,28 +55,28 @@ class NXGraphModel(AbstractGraphModel):
     def addInlet(self, node:NodeRef) -> InletRef:
         inlets_count = len(self.G.nodes[node]['inlets'])
         new_inlet_ref = InletRef(node, f"inlet{inlets_count+1}")
-        self.G.nodes[node]['inlets'].append(new_inlet_ref)
+        self.G.nodes[node._name]['inlets'].append(new_inlet_ref)
         self.inletsInserted.emit(node, [new_inlet_ref]) # TODO: emit correct index
         return new_inlet_ref
     
     def inletCount(self, node:NodeRef):
-        return len(self.G.nodes[node]['inlets'])
+        return len(self.G.nodes[node._name]['inlets'])
     
     def inlets(self, node:NodeRef):
-        return self.G.nodes[node]['inlets']
+        return self.G.nodes[node._name]['inlets']
     
     def addOutlet(self, node:NodeRef) -> OutletRef:
-        outlets_count = len(self.G.nodes[node]['outlets'])
+        outlets_count = len(self.G.nodes[node._name]['outlets'])
         new_outlet_ref = OutletRef(node, f"outlet{outlets_count+1}")
-        self.G.nodes[node]['outlets'].append(new_outlet_ref)
+        self.G.nodes[node._name]['outlets'].append(new_outlet_ref)
         self.outletsInserted.emit(node, [new_outlet_ref]) # TODO: emit correct index
         return new_outlet_ref
     
     def outletCount(self, node:NodeRef):
-        return len(self.G.nodes[node]['outlets'])
+        return len(self.G.nodes[node._name]['outlets'])
     
     def outlets(self, node:NodeRef):
-        return self.G.nodes[node]['outlets']
+        return self.G.nodes[node._name]['outlets']
     
     def addLink(self, outlet_index:OutletRef, inlet_index:InletRef) -> LinkRef:
         if not self.canLink(outlet_index, inlet_index):
@@ -83,7 +85,7 @@ class NXGraphModel(AbstractGraphModel):
         target_node = self.inletNode(inlet_index)
         link_ref = LinkRef(outlet_index, inlet_index, 0)
         self.linksAboutToBeInserted.emit([link_ref]) # Emit about-to-be-inserted signal
-        self.G.add_edge(source_node, target_node, key=(outlet_index, inlet_index)) # use port indexes as edge key to allow multiple edges between same nodes
+        self.G.add_edge(source_node._name, target_node._name, key=(outlet_index, inlet_index)) # use port indexes as edge key to allow multiple edges between same nodes
         self.linksInserted.emit([link_ref]) # TODO: emit correct index
         return link_ref
     
@@ -94,7 +96,7 @@ class NXGraphModel(AbstractGraphModel):
         target_node = self.inletNode(link._target)
         try:
             self.linksAboutToBeRemoved.emit([link])
-            self.G.remove_edge(source_node, target_node, key=(link._source, link._target))
+            self.G.remove_edge(source_node._name, target_node._name, key=(link._source, link._target))
             self.linksRemoved.emit([link])
             return True
         except KeyError:
@@ -104,12 +106,12 @@ class NXGraphModel(AbstractGraphModel):
         match port:
             case InletRef():
                 node = self.inletNode(port)
-                in_edges = self.G.in_edges(node, keys=True)
+                in_edges = self.G.in_edges(node._name, keys=True)
                 return [LinkRef(k[0], port, 0) for u, v, k in in_edges if k[1] == port] # count only edges connected to the specific inlet
             
             case OutletRef():
                 node = self.outletNode(port)
-                out_edges = self.G.out_edges(node, keys=True)
+                out_edges = self.G.out_edges(node._name, keys=True)
                 return [LinkRef(port, k[1], 0) for u, v, k in out_edges if k[0] == port] # count only edges connected to the specific outlet
             
             case None:
@@ -139,36 +141,52 @@ class NXGraphModel(AbstractGraphModel):
 
         ## Data
     
-    def attributes(self, index:NodeRef|InletRef|OutletRef|LinkRef) -> List[AttributeRef]:
-        match index:
+    def attributes(self, item_ref:NodeRef|InletRef|OutletRef|LinkRef) -> List[AttributeRef]:
+        match item_ref:
             case NodeRef():
-                return [AttributeRef(index, "name")]
+                name_attribute = AttributeRef(item_ref, "name")
+                data:Dict[str, Any] = self.G.nodes[item_ref._name] # ensure node exists
+                nx_node_attributes = [AttributeRef(item_ref, key) for key in data.keys() if key not in {"inlets", "outlets"}]
+                return [name_attribute] + nx_node_attributes
             case InletRef():
-                return [AttributeRef(index, "name")]
+                return [AttributeRef(item_ref, "name")]
             case OutletRef():
-                return [AttributeRef(index, "name")]
+                return [AttributeRef(item_ref, "name")]
             case LinkRef():
-                return [AttributeRef(index, "source"), AttributeRef(index, "target")]
+                return [AttributeRef(item_ref, "source"), AttributeRef(item_ref, "target")]
             case _:
                 return []
-        
-    def attributeOwner(self, attribute:AttributeRef) -> NodeRef|InletRef|OutletRef|LinkRef:
-        return attribute.owner
+
+    def addAttribute(self, owner: NodeRef | InletRef | OutletRef | LinkRef) -> AttributeRef:
+        node_data = self.G.nodes[owner._name]
+        all_attribute_names = node_data.keys()
+        unique_name = unique.make_unique_name("new_attribute", all_attribute_names)
+        node_data[unique_name] = None
+        attribute = AttributeRef(owner, unique_name)
+        self.attributesInserted.emit([attribute])
+        return attribute
 
     def attributeData(self, attribute, role:int=Qt.ItemDataRole.DisplayRole) -> Any:
         match attribute._owner:
             case NodeRef():
                 match attribute._name:
                     case "name":
-                        return attribute._owner._name
+                        node = attribute._owner
+                        return node._name
+                    case _:
+                        node_data = self.G.nodes[attribute._owner._name]
+                        return node_data.get(attribute._name, None)
+                    
             case InletRef():
                 match attribute._name:
                     case "name":
                         return attribute._owner._name
+                    
             case OutletRef():
                 match attribute._name:
                     case "name":
                         return attribute._owner._name
+                    
             case LinkRef():
                 match attribute._name:
                     case "source":
@@ -195,7 +213,7 @@ class NXGraphModel(AbstractGraphModel):
             case _:
                 raise ValueError(f"Invalid index type: {index}")
         
-    def remove_batch(self, items:List[NodeRef|InletRef|OutletRef|LinkRef]):
+    def remove_batch(self, items:List[NodeRef|LinkRef]):
         nodes_to_remove = [item for item in items if isinstance(item, NodeRef)]
         links_to_remove = [item for item in items if isinstance(item, LinkRef)]
 

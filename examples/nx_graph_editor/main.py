@@ -10,9 +10,83 @@ from qtpy.QtWidgets import *
 import networkx as nx
 
 from qdagview2.models.nx_graph_model import NXGraphModel
+from qdagview2.models.graph_references import NodeRef, LinkRef, OutletRef, InletRef
 from qdagview2.models.graph_selection_model import GraphSelectionModel
 from qdagview2.views.graph_view import GraphView
 from qdagview2.views.delegates.graph_delegate import GraphDelegate
+
+class NXNodeInspector(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Node Inspector")
+        self.setGeometry(200, 200, 300, 200)
+
+
+        layout = QVBoxLayout(self)
+        self.label = QLabel("Select a node to see details", self)
+        layout.addWidget(self.label)
+        add_attr_button = QPushButton("Add Attribute", self)
+        add_attr_button.clicked.connect(self.addAttribute)
+        layout.addWidget(add_attr_button)
+
+        self.setLayout(layout)
+
+        self._model: NXGraphModel|None = None
+        self._model_connections = []
+        self._selection_model: GraphSelectionModel|None = None
+
+    def setModel(self, model:NXGraphModel):
+        if self._model is not None:
+            for signal, slot in self._model_connections:
+                signal.disconnect(slot)
+            self._model_connections.clear()
+            self._model = None
+
+        if model is not None:
+            self._model_connections = [
+                (model.attributesInserted, self.updateDetails),
+                (model.attributesRemoved, self.updateDetails),
+                (model.attributesDataChanged, self.updateDetails)
+            ]
+            self._model = model
+
+    def setSelectionModel(self, selection_model:GraphSelectionModel):
+        self._selection_model = selection_model
+        self._selection_model.selectionChanged.connect(self.updateDetails)
+
+    def addAttribute(self):
+        if self._model is None or self._selection_model is None:
+            QMessageBox.warning(self, "No Model or Selection", "Please set a model and selection model before adding attributes.")
+            return
+        selected_refs = self._selection_model.selectedIndexes()
+        if not selected_refs:
+            QMessageBox.warning(self, "No Selection", "Please select a node to add an attribute.")
+            return
+        
+        for node_ref in filter(lambda ref: isinstance(ref, NodeRef), selected_refs):
+            self._model.addAttribute(node_ref)
+        
+        self.updateDetails()
+
+    def updateDetails(self):
+        if self._model is None or self._selection_model is None:
+            self.label.setText("No model or selection model set")
+            return
+        selected_refs = self._selection_model.selectedIndexes()
+        if not selected_refs:
+            self.label.setText("Select a node to see details")
+            return
+        
+        details = []
+        for node_ref in filter(lambda ref: isinstance(ref, NodeRef), selected_refs):
+            attributes = self._model.attributes(node_ref)
+            for attribute in attributes:
+                name = attribute._name
+                value = self._model.attributeData(attribute)
+                details.append(f"{name}: {value}")
+
+        self.label.setText("\n".join(details))
+
 
 
 class MainWindow(QWidget):
@@ -31,99 +105,27 @@ class MainWindow(QWidget):
 
         # setup model controller
         self.graph_model = NXGraphModel(parent=self)
-        self.graph_model.nodesInserted.connect(self.update_label)
-        self.graph_model.inletsInserted.connect(self.update_label)
-        self.graph_model.outletsInserted.connect(self.update_label)
-        self.graph_model.linksInserted.connect(self.update_label)
-        self.graph_model.nodesRemoved.connect(self.update_label)
-        self.graph_model.inletsRemoved.connect(self.update_label)
-        self.graph_model.outletsRemoved.connect(self.update_label)
-        self.graph_model.linksRemoved.connect(self.update_label)
 
         # setup selection controller
         self.graph_selection_model = GraphSelectionModel(parent=self)
         self.graph_selection_model.setGraphModel(self.graph_model)
-        self.graph_selection_model.currentChanged.connect(self.update_label)
-        self.graph_selection_model.selectionChanged.connect(self.update_label)
-        self.graph_selection_model.selectionChanged.connect(self.onSelectionChanged)
-
-        # log signals
-        self.graph_model.nodesAboutToBeInserted.connect(lambda node_refs: self.appendLog(f"Nodes about to be inserted: {node_refs}"))
-        self.graph_model.nodesInserted.connect(lambda node_refs: self.appendLog(f"Nodes inserted: {node_refs}"))
-        self.graph_model.inletsAboutToBeInserted.connect(lambda inlet_refs: self.appendLog(f"Inlets about to be inserted: {inlet_refs}"))
-        self.graph_model.linksInserted.connect(lambda link_refs: self.appendLog(f"Links inserted: {link_refs}"))
-        self.graph_model.nodesAboutToBeRemoved.connect(lambda node_refs: self.appendLog(f"Nodes about to be removed: {node_refs}"))
-        self.graph_model.linksAboutToBeRemoved.connect(lambda link_refs: self.appendLog(f"Links about to be removed: {link_refs}"))
-        self.graph_model.nodesRemoved.connect(lambda node_refs: self.appendLog(f"Nodes removed: {node_refs}"))
-        self.graph_model.linksRemoved.connect(lambda link_refs: self.appendLog(f"Links removed: {link_refs}"))
-
-        self.graph_selection_model.selectionChanged.connect(lambda selected, deselected: self.appendLog(f"Selection changed. Selected: {selected}, Deselected: {deselected}"))
-        self.graph_selection_model.currentChanged.connect(lambda current, previous: self.appendLog(f"Current changed: {current}, Previous: {previous}"))
 
         # # setup graph view
         self.graphview1 = GraphView(parent=self, delegate=GraphDelegate())
         self.graphview1.setModel(self.graph_model)
         self.graphview1.setSelectionModel(self.graph_selection_model)
-        self.graphview2 = GraphView(parent=self, delegate=GraphDelegate())
-        self.graphview2.setModel(self.graph_model)
-        self.graphview2.setSelectionModel(self.graph_selection_model)
 
-        # label
-        self.label = QLabel("Graph View")
-        self.log = QPlainTextEdit("Log:")
-        self.log.setReadOnly(True)
+        # setup node inspector
+        self.node_inspector = NXNodeInspector(parent=self)
+        self.node_inspector.setModel(self.graph_model)
+        self.node_inspector.setSelectionModel(self.graph_selection_model)
 
         # setup layout
         layout = QHBoxLayout(self)
         layout.setMenuBar(self.toolbar)
         layout.addWidget(self.graphview1)
-        layout.addWidget(self.graphview2)
-        layout.addWidget(self.label)
-        layout.addWidget(self.log)
+        layout.addWidget(self.node_inspector)
         self.setLayout(layout)
-
-        # init
-        self.update_label()
-
-    def appendLog(self, message:str):
-        self.log.appendPlainText(f"Log: {message}")
-
-    def onSelectionChanged(self, selected, deselected):
-        print("Selection changed:")
-        print("- Selected:", selected)
-        print("- Deselected:", deselected)
-        print("- Selection:", self.graph_selection_model.selectedIndexes())
-        print("- Current:", self.graph_selection_model.currentIndex())
-
-    def update_label(self):
-        print("Updating label...")
-        node_count = self.graph_model.nodeCount()
-        link_count = self.graph_model.linkCount()
-        node_list = ""
-        for n in self.graph_model.nodes():
-            inlet_attributes = [self.graph_model.attributes(i) for i in self.graph_model.inlets(n)]
-            outlet_attributes = [self.graph_model.attributes(o) for o in self.graph_model.outlets(n)]
-
-            inlets =  [self.graph_model.attributeData(a, role=Qt.ItemDataRole.DisplayRole) for attrs in inlet_attributes for a in attrs]
-            outlets = [self.graph_model.attributeData(a, role=Qt.ItemDataRole.DisplayRole) for attrs in outlet_attributes for a in attrs]
-
-            is_selected = self.graph_selection_model.isSelected(n)
-
-            node_list += f"- [{'x' if is_selected else ' '}] {n} (Inlets: {', '.join(inlets)}, Outlets: {', '.join(outlets)})\n"
-        link_list = ""
-        for link in self.graph_model.links():
-            source_port = self.graph_model.linkSource(link)
-            target_port = self.graph_model.linkTarget(link)
-            is_selected = self.graph_selection_model.isSelected(link)
-            link_list += f"- [{'x' if is_selected else ' '}] {source_port} -> {target_port}\n"
-
-        from textwrap import dedent
-        self.label.setText(dedent(f"""
-Nodes: {node_count}
-{node_list}
-Links: {link_count}
-{link_list}
-        """))
 
 
     def appendNode(self):
@@ -132,13 +134,6 @@ Links: {link_count}
     def removeSelectedItems(self):
         selected_refs = self.graph_selection_model.selectedIndexes()
         self.graph_model.remove_batch(selected_refs)
-
-        # for item in selected_items:
-        #     match item:
-        #         case QGraphicsWidget() if isinstance(item, QGraphicsWidget):
-        #             self.graphview._widget_manager.removeWidget(item)
-        #         case _:
-        #             print(f"Unknown item type: {type(item)}")
 
 
 if __name__ == "__main__":

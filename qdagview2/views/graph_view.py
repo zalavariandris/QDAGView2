@@ -371,7 +371,7 @@ class GraphView(QGraphicsView):
         if Qt.ItemDataRole.DisplayRole in roles or Qt.ItemDataRole.DisplayRole in roles or roles == []:
             if cell_widget:= self._cell_manager.getWidget(index):
                 text = self._graph_model.attributeData(index, role=Qt.ItemDataRole.DisplayRole)
-                cell_widget.setText(text)
+                cell_widget.setText(f"{text}")
 
     ## Selection handling   
     def setSelectionModel(self, graph_selection_model: GraphSelectionModel):
