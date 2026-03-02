@@ -53,7 +53,7 @@ class AbstractGraphModel(QObject, ABC, metaclass=QABCMeta):
     linksRemoved =   Signal(list) # list of LinkRef
     attributesRemoved = Signal(list) # list of AttributeRef
 
-    
+    nodesDataChanged = Signal(list, list, list) # list of NodeRef, list of columns, list of roles
     attributesDataChanged = Signal(list, list) # list of AttributeRef, list of roles
 
     def __init__(self, parent: QObject | None=None):
@@ -219,7 +219,50 @@ class AbstractGraphModel(QObject, ABC, metaclass=QABCMeta):
             int: The number of links connected to the port, or total number of links if port is None.
         """
         return len(self.links(port))
+
+    @abstractmethod
+    def nodeColumnsCount(self, graph:None=None) -> int:
+        """
+        Get the number of columns for a given node.
+        This is used by the graph view to determine how many columns to render for the node.
+        Args:
+            node (NodeRef): The index of the node.
+        Returns:
+            int: The number of columns for the node.
+        """
+        ...
+
+    @abstractmethod
+    def nodeData(self, node:NodeRef, column:int, role:Qt.ItemDataRole) -> Any:
+        """
+        Get the data for a given node, column, and role.
+        This is used by the graph view to get the data to render for the node.
+        Args:
+            node (NodeRef): The index of the node.
+            column (int): The column number.
+            role (Qt.ItemDataRole): The role for which data is requested.
+        Returns:
+            Any: The data for the node, column, and role.
+        """
+        return None
     
+    def setNodeData(self, node:NodeRef, column:int, value:Any, role:Qt.ItemDataRole) -> bool:
+        """
+        Set the data for a given node, column, and role.
+        This is used by the graph view to set data when the user edits a node.
+        Args:
+            node (NodeRef): The index of the node.
+            column (int): The column number.
+            value (Any): The value to set for the node.
+            role (Qt.ItemDataRole): The role for which data is being set.
+        Returns:
+            bool: True if the data was successfully set, False otherwise.
+        """
+        raise NotImplementedError("setNodeData() method must be implemented by subclass")
+
+    def nodeHeaderData(self, column:int, role:int=Qt.ItemDataRole.DisplayRole) -> Any:
+        return column
+
     def addAttribute(self, owner:NodeRef|InletRef|OutletRef|LinkRef) -> AttributeRef:
         """
         Add a new attribute to the given owner (node, port, or link).

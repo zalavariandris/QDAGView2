@@ -29,8 +29,8 @@ from qdagview2.models.graph_references import (
 from qdagview2.views.utils.geo import makeLineBetweenShapes, makeLineToShape, makeArrowShape, getShapeCenter
 
 from qdagview2.views.delegates.graph_delegate import GraphDelegate
-from qdagview2.views.delegates.abstract_graph_widget_factory import AbstractGraphWidgetFactory #TODO: merge into delegate
-from qdagview2.views.delegates.graph_widget_factory import GraphWidgetFactory #TODO: merge into delegate
+# from qdagview2.views.delegates.abstract_graph_widget_factory import AbstractGraphWidgetFactory #TODO: merge into delegate
+# from qdagview2.views.delegates.graph_widget_factory import GraphWidgetFactory #TODO: merge into delegate
 
 from qdagview2.views.widgets.node_widget import NodeWidget
 from qdagview2.views.widgets.port_widget import InletWidget, OutletWidget
@@ -45,7 +45,6 @@ from qdagview2.views.utils.linking_tool import LinkingTool
 class GraphView(QGraphicsView):
     def __init__(self, 
                  delegate:GraphDelegate|None=None, 
-                 factory: AbstractGraphWidgetFactory|None=None,
                  parent: QWidget | None = None):
         super().__init__(parent=parent)
 
@@ -62,12 +61,13 @@ class GraphView(QGraphicsView):
         ## State of the graph view
         self._linking_tool = LinkingTool(self)
 
-        self._factory = factory if factory else GraphWidgetFactory()
-        self._factory.portPositionChanged.connect(self.handlePortPositionChanged)
+        self._delegate = delegate if delegate else GraphDelegate()
+        self._delegate.portPositionChanged.connect(self.handlePortPositionChanged)
 
         # Widget Managers
         self._widget_manager = BiDictWidgetManager[NodeRef|OutletRef|InletRef|LinkRef]()
         self._cell_manager = BiDictWidgetManager[AttributeRef]()
+        self._column_widget_manager = BiDictWidgetManager[tuple[NodeRef, int]]()  # (row index, column) -> widget
 
         # setup the view
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
@@ -91,7 +91,7 @@ class GraphView(QGraphicsView):
             self._graph_model_connections = []
 
         # connect new model signals
-        model_connections: list[tuple[Signal, Callable]] = []
+        model_connections: list[tuple[pyqtBoundSignal, Callable]] = []
         model_connections = [
             (model.nodesInserted,           self.handleNodesInserted),
             (model.inletsInserted,          self.handleInletsInserted),
@@ -103,7 +103,8 @@ class GraphView(QGraphicsView):
             (model.outletsAboutToBeRemoved, self.handleOutletsRemoved),
             (model.linksAboutToBeRemoved,   self.handleLinksRemoved),
 
-            (model.attributesDataChanged,        self.handleAttributeDataChanged),
+            (model.nodesDataChanged,        self.handleNodesDataChanged),
+            (model.attributesDataChanged,   self.handleAttributeDataChanged),
         ]
         for signal, slot in model_connections:
             signal.connect(slot)
@@ -196,7 +197,7 @@ class GraphView(QGraphicsView):
     ## Manage widgets
     def _addNodeWidgetForIndex(self, row_index:NodeRef)->QGraphicsItem:
         # widget management
-        row_widget = self._factory.createNodeWidget(self.scene(), row_index, self)
+        row_widget = self._delegate.createNodeWidget(self.scene(), row_index, self)
         print(f"Created widget for node index: {row_index}, widget: {row_widget}")
         self._widget_manager.insertWidget(row_index, row_widget)
 
@@ -208,8 +209,8 @@ class GraphView(QGraphicsView):
 
         parent_node_widget = self._widget_manager.getWidget(node_index)
 
-        # widget factory
-        row_widget = self._factory.createOutletWidget(parent_node_widget, row_index, self)
+        # widget delegate
+        row_widget = self._delegate.createOutletWidget(parent_node_widget, row_index, self)
 
         # widget management
         print(f"Adding outlet widget for outlet index: {row_index}, parent node index: {node_index}")
@@ -222,8 +223,8 @@ class GraphView(QGraphicsView):
         node_index = self._graph_model.inletNode(row_index)  # ensure inlet node is valid
         parent_node_widget = self._widget_manager.getWidget(node_index)
 
-        # widget factory
-        row_widget = self._factory.createInletWidget(parent_node_widget, row_index, self)
+        # widget delegate
+        row_widget = self._delegate.createInletWidget(parent_node_widget, row_index, self)
 
         # widget management
         print(f"Adding inlet widget for inlet index: {row_index}, parent node index: {node_index}")
@@ -231,25 +232,24 @@ class GraphView(QGraphicsView):
 
         return row_widget
 
-    def _addLinkWidgetForIndex(self, link:LinkRef)->QGraphicsItem:
+    def _addLinkWidgetForIndex(self, link_ref:LinkRef)->QGraphicsItem:
         assert self._graph_model, "Model must be set before adding link widgets!"
-        inlet_index = self._graph_model.linkTarget(link)  # ensure target is valid
+        inlet_index = self._graph_model.linkTarget(link_ref)  # ensure target is valid
         parent_inlet_widget = self._widget_manager.getWidget(inlet_index)
         assert isinstance(parent_inlet_widget, InletWidget)
 
-        # widget factory
-        link_widget = self._factory.createLinkWidget(self.scene(), link, self)
+        # link management
+        source_index = self._graph_model.linkSource(link_ref)
+        source_widget = self._widget_manager.getWidget(source_index) if source_index is not None else None
+        target_index = self._graph_model.linkTarget(link_ref)
+        target_widget = self._widget_manager.getWidget(target_index) if target_index is not None else None
+        
+        # widget delegate
+        link_widget = self._delegate.createLinkWidget(source_widget, target_widget, link_ref, self)
 
         # widget management
-        print(f"Adding link widget for link index: {link}, target inlet index: {inlet_index}")
-        self._widget_manager.insertWidget(link, link_widget)
-
-        # link management
-        source_index = self._graph_model.linkSource(link)
-        source_widget = self._widget_manager.getWidget(source_index) if source_index is not None else None
-        target_index = self._graph_model.linkTarget(link)
-        target_widget = self._widget_manager.getWidget(target_index) if target_index is not None else None
-        # self._link_manager.link(link_widget, source_widget, target_widget)
+        print(f"Adding link widget for link index: {link_ref}, target inlet index: {inlet_index}")
+        self._widget_manager.insertWidget(link_ref, link_widget)
         self._update_link_position(link_widget, source_widget, target_widget)
 
         return link_widget
@@ -257,7 +257,7 @@ class GraphView(QGraphicsView):
     def _addCellWidgetForIndex(self, cell_index:QPersistentModelIndex)->QGraphicsItem:
         row_index = self._graph_model.attributeOwner(cell_index)
         row_widget = self._widget_manager.getWidget(row_index)
-        cell_widget = self._factory.createCellWidget(row_widget, cell_index, self)
+        cell_widget = self._delegate.createAttributeWidget(row_widget, cell_index, self)
         print(f"Adding cell widget for attribute index: {cell_index}, parent row index: {row_index}")
         self._cell_manager.insertWidget(cell_index, cell_widget)
         self._set_cell_data(cell_index, roles=[Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole])
@@ -266,7 +266,7 @@ class GraphView(QGraphicsView):
     def _removeNodeWidgetForIndex(self, row_index:NodeT):
         # widget management
         if row_widget := self._widget_manager.getWidget(row_index):
-            self._factory.destroyNodeWidget(self.scene(), row_widget)
+            self._delegate.destroyNodeWidget(self.scene(), row_widget)
             self._widget_manager.removeWidget(row_index)
 
     def _removeInletWidgetForIndex(self, row_index:QPersistentModelIndex):    
@@ -274,7 +274,7 @@ class GraphView(QGraphicsView):
         if row_widget := self._widget_manager.getWidget(row_index):
             node_index = self._graph_model.inletNode(row_index)
             parent_widget = self._widget_manager.getWidget(node_index)
-            self._factory.destroyInletWidget(parent_widget, row_widget)
+            self._delegate.destroyInletWidget(parent_widget, row_widget)
             self._widget_manager.removeWidget(row_index)
 
     def _removeOutletWidgetForIndex(self, row_index:QPersistentModelIndex):
@@ -282,27 +282,41 @@ class GraphView(QGraphicsView):
         if row_widget := self._widget_manager.getWidget(row_index):
             node_index = self._graph_model.outletNode(row_index)
             parent_widget = self._widget_manager.getWidget(node_index)
-            self._factory.destroyOutletWidget(parent_widget, row_widget)
+            self._delegate.destroyOutletWidget(parent_widget, row_widget)
             self._widget_manager.removeWidget(row_index)
     
     def _removeLinkWidgetForIndex(self, link_index:QPersistentModelIndex):
         # widget management
         if link_widget := self._widget_manager.getWidget(link_index):
-            self._factory.destroyLinkWidget(self.scene(), link_widget)
+            self._delegate.destroyLinkWidget(self.scene(), link_widget)
             self._widget_manager.removeWidget(link_index)
     
     def _removeCellWidgetForIndex(self, cell_index:QPersistentModelIndex):
         if cell_widget := self._cell_manager.getWidget(cell_index):
             row_index = self._graph_model.attributeOwner(cell_index)
             row_widget = self._widget_manager.getWidget(row_index)
-            self._factory.destroyCellWidget(row_widget, cell_widget)
+            self._delegate.destroyAttributeWidget(row_widget, cell_widget)
             self._cell_manager.removeWidget(cell_index)
+
+    def _addNodeColumnWidgetForIndex(self, node_ref:NodeRef, column:int)->QGraphicsItem:
+        node_widget = self._widget_manager.getWidget(node_ref)
+        column_widget = self._delegate.createNodeColumnWidget(node_widget, node_ref, column, self)
+        self._column_widget_manager.insertWidget((node_ref, column), column_widget)
+        return column_widget
+    
+    def _removeNodeColumnWidgetForIndex(self, node_ref:NodeRef, column:int):
+        if column_widget := self._column_widget_manager.getWidget((node_ref, column)):
+            self._delegate.destroyNodeColumnWidget(column_widget)
+            self._column_widget_manager.removeWidget((node_ref, column))
 
     ## Handle model changes / Manage widget lifecycle
     def handleNodesInserted(self, node_indexes:List[NodeT]):
         for node_index in node_indexes:
             w = self._addNodeWidgetForIndex(node_index)
             assert w is not None, f"Failed to create widget for node index: {node_index}"
+            for col in range(self._graph_model.nodeColumnsCount(node_index)):
+                column_widget = self._addNodeColumnWidgetForIndex(node_index, col)
+
             self.handleInletsInserted(self._graph_model.inlets(node_index))
             self.handleOutletsInserted(self._graph_model.outlets(node_index))
             self.handleAttributesInserted(self._graph_model.attributes(node_index))
@@ -360,6 +374,11 @@ class GraphView(QGraphicsView):
             self._removeCellWidgetForIndex(attribute)
 
     ## Handle attributes data changes
+    def handleNodesDataChanged(self, node_indexes:List[NodeRef], columns:List[int], roles:List[int]):
+        for node_index in node_indexes:
+            if widget := self._widget_manager.getWidget(node_index):
+                self._delegate.updateNodeWidget(widget, node_index, columns, roles)
+
     def handleAttributeDataChanged(self, attributes:List[QPersistentModelIndex], roles:List[int]):
         for attribute in attributes:
             self._set_cell_data(attribute, roles)
@@ -552,7 +571,7 @@ class GraphView(QGraphicsView):
             return
             
         def onEditingFinished(editor:QLineEdit, cell_widget:CellWidget, index:QModelIndex):
-            self._delegate.setModelData(editor, self._graph_model, index)
+            self._delegate.setModelAttributeData(editor, self._graph_model, index)
             editor.deleteLater()
             self._set_cell_data(index, roles=[Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole])
 
@@ -569,7 +588,7 @@ class GraphView(QGraphicsView):
                 # Ensure the editor is properly positioned and shown
                 editor.setParent(self)
                 editor.setGeometry(rect)
-                self._delegate.setEditorData(editor, index)
+                self._delegate.setAttributeEditorData(editor, index)
                 editor.show()  # Explicitly show the editor
                 editor.setFocus(Qt.FocusReason.MouseFocusReason)
                 editor.editingFinished.connect(lambda editor=editor, cell_widget=cell_widget, index=index: onEditingFinished(editor, cell_widget, index))

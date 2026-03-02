@@ -33,7 +33,13 @@ class NodesProxyItemModel(QAbstractItemModel):
         return len(self._node_to_row) # Use internal map for consistency
 
     def columnCount(self, parent=None):
-        return 2
+        if not self._source_model:
+            return 0
+        
+        if not parent.isValid():
+            return self._source_model.nodeColumnsCount()
+        else:
+            return 0 # No child items, so no columns
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid() or self._source_model is None:
@@ -45,11 +51,8 @@ class NodesProxyItemModel(QAbstractItemModel):
             if not node_ref:
                 return None
 
-            match index.column():
-                case 0:
-                    return node_ref._name # Show actual node name
-                case 1:
-                    return "Node"
+            return self._source_model.nodeData(node_ref, index.column(), role)
+
         return None
             
     def setSourceModel(self, source_model: AbstractGraphModel):
@@ -144,9 +147,10 @@ class NodesProxyItemModel(QAbstractItemModel):
         return self._source_model
 
     def headerData(self, section, orientation, role=None):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            if section == 0:
-                return "Node"
-            elif section == 1:
-                return "Value"
-        return None
+        if self._source_model is None:
+            return None
+        match orientation:
+            case Qt.Orientation.Horizontal:
+                return self._source_model.nodeHeaderData(section, role)
+            case Qt.Orientation.Vertical:
+                return str(section)

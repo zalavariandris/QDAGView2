@@ -3,9 +3,9 @@ from qtpy.QtGui import *
 from qtpy.QtCore import *
 from qtpy.QtWidgets import *
 
-from .cell_widget import CellWidget
-from .port_widget import PortWidget
-from ..utils.qt import distribute_items
+from qdagview2.views.widgets.cell_widget import CellWidget
+from qdagview2.views.widgets.port_widget import PortWidget
+from qdagview2.views.utils.qt import distribute_items
 
 class NodeWidget(QGraphicsItem):
     def __init__(self, parent: QGraphicsItem | None = None):
@@ -18,7 +18,8 @@ class NodeWidget(QGraphicsItem):
         self._outlets: List[PortWidget] = []
 
         # manage cells
-        self._cells: List[CellWidget] = []
+        self._header_cells: List[CellWidget] = []
+        self._side_cells: List[CellWidget] = []
 
         self._graphview = None
 
@@ -60,34 +61,52 @@ class NodeWidget(QGraphicsItem):
     def outlets(self) -> list[PortWidget]:
         return [outlet for outlet in self._outlets]
 
-    # manage cells
-    def _arrangeCells(self, first=0, last=-1):
-        if len(self._cells) == 0:
+    # manage central cells
+    def _arrangeHeaderCells(self, first=0, last=-1):
+        if len(self._header_cells) == 0:
             return
-        
-        first_cell = self._cells[0]
-        first_cell.setPos(5, -2)  # First cell position
-        first_cell.setTextWidth(self.boundingRect().width() - 10)
 
-        for i, cell in enumerate(self._cells[1:]):
+        for i, cell in enumerate(self._header_cells):
+            cell.setPos(5, -2 + i * 12)  # First cell position
+            cell.setTextWidth(self.boundingRect().width() - 10)
+
+    def insertHeaderCell(self, pos, cell:CellWidget):
+        self._header_cells.insert(pos, cell)
+        cell.setParentItem(self)
+        self._arrangeHeaderCells(pos)
+
+    def removeHeaderCell(self, cell: CellWidget):
+        self._header_cells.remove(cell)
+        cell.setParentItem(None)  # Remove from graphics hierarchy
+        self._arrangeHeaderCells()
+
+    def headerCells(self) -> list[CellWidget]:
+        return [cell for cell in self._header_cells]
+
+    # manage side cells
+    def _arrangeSideCells(self, first=0, last=-1):
+        if len(self._side_cells) == 0:
+            return
+
+        for i, cell in enumerate(self._side_cells):
             cell.setPos(self.boundingRect().width(), -2 + i * 12)
 
-    def insertCell(self, pos, cell:QGraphicsItem):
-        self._cells.insert(pos, cell)
+    def insertSideCell(self, pos, cell:CellWidget):
+        self._side_cells.insert(pos, cell)
         cell.setParentItem(self)
-        self._arrangeCells(pos)
+        self._arrangeSideCells(pos)
 
-    def removeCell(self, cell: CellWidget):
-        self._cells.remove(cell)
+    def removeSideCell(self, cell: CellWidget):
+        self._side_cells.remove(cell)
         cell.setParentItem(None)  # Remove from graphics hierarchy
-        self._arrangeCells()
+        self._arrangeSideCells()
 
-    def cells(self) -> list[CellWidget]:
-        return [cell for cell in self._cells]
+    def sideCells(self) -> list[CellWidget]:
+        return [cell for cell in self._side_cells]
 
     # customize appearance
     def boundingRect(self):
-        return QRectF(0, 0, 64, 20)
+        return QRectF(0, 0, 64*2, 20*2)
     
     def paint(self, painter: QPainter, option: QStyleOption, widget=None):
         rect = option.rect
@@ -98,3 +117,15 @@ class NodeWidget(QGraphicsItem):
             painter.setBrush(palette.highlight())
 
         painter.drawRoundedRect(rect, 6, 6)
+
+
+if __name__ == "__main__":
+    app = QApplication([])
+    scene = QGraphicsScene()
+    view = QGraphicsView(scene)
+    node = NodeWidget()
+
+    scene.addItem(node)
+    view.show()
+    import sys
+    sys.exit(app.exec())

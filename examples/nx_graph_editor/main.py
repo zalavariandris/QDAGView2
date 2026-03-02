@@ -17,90 +17,7 @@ from qdagview2.views.delegates.graph_delegate import GraphDelegate
 
 from qdagview2.proxy_itemmodels.nodes_proxy_itemmodel import NodesProxyItemModel
 from qdagview2.proxy_itemmodels.links_proxy_itemmodel import LinksProxyItemModel
-
-class NXNodeInspector(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Node Inspector")
-        self.setGeometry(200, 200, 300, 200)
-
-        layout = QVBoxLayout(self)
-        self.label = QLabel("Select a node to see details", self)
-        layout.addWidget(self.label)
-        add_attr_button = QPushButton("Add Attribute", self)
-        add_attr_button.clicked.connect(self.addAttribute)
-        layout.addWidget(add_attr_button)
-
-        self.setLayout(layout)
-
-        self._model: NXGraphModel|None = None
-        self._nodes_proxy_model: NodesProxyItemModel|None = None
-        self._model_connections = []
-        self._selection_model: GraphSelectionModel|None = None
-
-        nodes_list_view = QListView(self)
-        nodes_list_view.setModel(self._nodes_proxy_model)
-        layout.addWidget(nodes_list_view)
-
-    def setModel(self, model:NXGraphModel):
-        if self._model is not None:
-            for signal, slot in self._model_connections:
-                signal.disconnect(slot)
-            self._model_connections.clear()
-            self._model = None
-
-        if model is not None:
-            self._model_connections = [
-                (model.attributesInserted, self.updateDetails),
-                (model.attributesRemoved, self.updateDetails),
-                (model.attributesDataChanged, self.updateDetails)
-            ]
-            self._model = model
-
-    def update_attribute_list(self):
-        node = None
-        if self._selection_model is not None:
-            current_ref = self._selection_model.currentIndex()
-            if isinstance(current_ref, NodeRef):
-                node = current_ref
-        self._nodes_proxy_model.setSourceModel(model, node)
-
-    def setSelectionModel(self, selection_model:GraphSelectionModel):
-        self._selection_model = selection_model
-        self._selection_model.selectionChanged.connect(self.updateDetails)
-
-    def addAttribute(self):
-        if self._model is None or self._selection_model is None:
-            QMessageBox.warning(self, "No Model or Selection", "Please set a model and selection model before adding attributes.")
-            return
-        selected_refs = self._selection_model.selectedIndexes()
-        if not selected_refs:
-            QMessageBox.warning(self, "No Selection", "Please select a node to add an attribute.")
-            return
-        
-        for node_ref in filter(lambda ref: isinstance(ref, NodeRef), selected_refs):
-            self._model.addAttribute(node_ref)
-        
-        self.updateDetails()
-
-    def updateDetails(self):
-        if self._model is None or self._selection_model is None:
-            self.label.setText("No model or selection model set")
-            return
-        selected_refs = self._selection_model.selectedIndexes()
-        if not selected_refs:
-            self.label.setText("Select a node to see details")
-            return
-        
-        details = []
-        for node_ref in filter(lambda ref: isinstance(ref, NodeRef), selected_refs):
-            attributes = self._model.attributes(node_ref)
-            for attribute in attributes:
-                name = attribute._name
-                value = self._model.attributeData(attribute)
-                details.append(f"{name}: {value}")
-
-        self.label.setText("\n".join(details))
+from qdagview2.proxy_itemmodels.attributes_proxy_itemmodel import AttributesProxyItemModel
 
 
 class MainWindow(QWidget):
@@ -108,7 +25,9 @@ class MainWindow(QWidget):
         super().__init__()
         self.setWindowTitle("NetworkX Graph View")
         self.setGeometry(100, 100, 800, 600)
-    
+
+        layout = QHBoxLayout(self)
+        
         # setup toolbar
         self.toolbar = QMenuBar(self)
         add_action = self.toolbar.addAction("Add Node")
@@ -116,6 +35,7 @@ class MainWindow(QWidget):
         remove_action = self.toolbar.addAction("Remove Node")
         remove_action.triggered.connect(self.removeSelectedItems)
         self.toolbar.setNativeMenuBar(False)
+        layout.setMenuBar(self.toolbar)
 
         # setup model controller
         self.graph_model = NXGraphModel(parent=self)
@@ -128,6 +48,7 @@ class MainWindow(QWidget):
         self.graphview1 = GraphView(parent=self, delegate=GraphDelegate())
         self.graphview1.setModel(self.graph_model)
         self.graphview1.setSelectionModel(self.graph_selection_model)
+        layout.addWidget(self.graphview1)
 
         # setup node list
         self.nodes_proxy_model = NodesProxyItemModel(parent=self)
@@ -135,20 +56,28 @@ class MainWindow(QWidget):
         self.node_list_view = QTableView(self)
         self.node_list_view.setFixedWidth(180)
         self.node_list_view.setModel(self.nodes_proxy_model)
+        layout.addWidget(self.node_list_view)
 
-        # setup link list
-        self.links_proxy_model = LinksProxyItemModel(parent=self)
-        self.links_proxy_model.setSourceModel(self.graph_model)
-        self.link_list_view = QTableView(self)
-        self.link_list_view.setFixedWidth(180)
-        self.link_list_view.setModel(self.links_proxy_model)
+        # # setup link list
+        # self.links_proxy_model = LinksProxyItemModel(parent=self)
+        # self.links_proxy_model.setSourceModel(self.graph_model)
+        # self.link_list_view = QTableView(self)
+        # self.link_list_view.setFixedWidth(180)
+        # self.link_list_view.setModel(self.links_proxy_model)
+
+        # # setup attribute list
+        # self.attributes_proxy_model = AttributesProxyItemModel(parent=self)
+        # self.attributes_proxy_model.setSourceModel(self.graph_model)
+        # self.attribute_list_view = QTreeView(self)
+        # self.attribute_list_view.setFixedWidth(180)
+        # self.attribute_list_view.setModel(self.attributes_proxy_model)
 
         # setup layout
-        layout = QHBoxLayout(self)
-        layout.setMenuBar(self.toolbar)
-        layout.addWidget(self.graphview1)
-        layout.addWidget(self.node_list_view)
-        layout.addWidget(self.link_list_view)
+        
+        
+        # layout.addWidget(self.attribute_list_view)
+        
+        # layout.addWidget(self.link_list_view)
         self.setLayout(layout)
 
     def appendNode(self):

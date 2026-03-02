@@ -12,6 +12,7 @@ from qtpy.QtGui import *
 from qdagview2.graph_item_types import GraphItemType
 from qdagview2.utils import unique
 
+
 class NXGraphModel(AbstractGraphModel):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -166,37 +167,6 @@ class NXGraphModel(AbstractGraphModel):
         self.attributesInserted.emit([attribute])
         return attribute
 
-    def attributeData(self, attribute, role:int=Qt.ItemDataRole.DisplayRole) -> Any:
-        match attribute._owner:
-            case NodeRef():
-                match attribute._name:
-                    case "name":
-                        node = attribute._owner
-                        return node._name
-                    case _:
-                        node_data = self.G.nodes[attribute._owner._name]
-                        return node_data.get(attribute._name, None)
-                    
-            case InletRef():
-                match attribute._name:
-                    case "name":
-                        return attribute._owner._name
-                    
-            case OutletRef():
-                match attribute._name:
-                    case "name":
-                        return attribute._owner._name
-                    
-            case LinkRef():
-                match attribute._name:
-                    case "source":
-                        return f"{attribute._owner._source._node._name}:{attribute._owner._source._name}"
-                    case "target":
-                        return f"{attribute._owner._target._node._name}:{attribute._owner._target._name}"
-    
-    def setAttributeData(self, attribute, value:Any, role:int=Qt.ItemDataRole.EditRole) -> bool:
-        return False
-    
     def attributeOwner(self, attribute:AttributeRef)->NodeRef|InletRef|OutletRef|LinkRef:
         return attribute._owner
     
@@ -227,6 +197,66 @@ class NXGraphModel(AbstractGraphModel):
             #TODO: implement batch removal of inlets/outlets
             raise NotImplementedError(f"Batch removal of inlets/outlets is not implemented yet, got: items={items}")
 
+    def nodeColumnsCount(self, graph=None) -> int:
+        return 2
+
+    def nodeHeaderData(self, column:int, role:int=Qt.ItemDataRole.DisplayRole) -> Any:
+        if role == Qt.ItemDataRole.DisplayRole:
+            match column:
+                case 0:
+                    return "Name"
+                case 1:
+                    return "Rank"
+        return None
+
+    def nodeData(self, node: NodeRef, column:int, role:int=Qt.ItemDataRole.DisplayRole) -> Any:
+        match column:
+            case 0:
+                if role == Qt.ItemDataRole.DisplayRole:
+                    return node._name
+            case 1:
+                if role == Qt.ItemDataRole.DisplayRole:
+                    data = self.G.nodes[node._name]
+                    return data.get("rank", 'N/A')
+                elif role == Qt.ItemDataRole.EditRole:
+                    data = self.G.nodes[node._name]
+                    return data.get("rank", None)
+        return None
+    
+    def setNodeData(self, node: NodeRef, column:int, value:Any, role:int=Qt.ItemDataRole.EditRole) -> bool:
+        return False
+
+    def attributeData(self, attribute, role:int=Qt.ItemDataRole.DisplayRole) -> Any:
+        match attribute._owner:
+            case NodeRef():
+                match attribute._name:
+                    case "label":
+                        node = attribute._owner
+                        return node._name
+                    case _:
+                        node_data = self.G.nodes[attribute._owner._name]
+                        return node_data.get(attribute._name, None)
+                    
+            case InletRef():
+                match attribute._name:
+                    case "name":
+                        return attribute._owner._name
+                    
+            case OutletRef():
+                match attribute._name:
+                    case "name":
+                        return attribute._owner._name
+                    
+            case LinkRef():
+                match attribute._name:
+                    case "source":
+                        return f"{attribute._owner._source._node._name}:{attribute._owner._source._name}"
+                    case "target":
+                        return f"{attribute._owner._target._node._name}:{attribute._owner._target._name}"
+    
+    def setAttributeData(self, attribute, value:Any, role:int=Qt.ItemDataRole.EditRole) -> bool:
+        return False
+    
 
 if __name__ == "__main__":
     def test_graph_item_ref():
