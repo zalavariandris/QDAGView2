@@ -71,7 +71,7 @@ class GraphDelegate(QObject):
         # Schedule widget for deletion to prevent memory leaks
         widget.deleteLater()
 
-    # Horizontal widgets
+    # Horizontal "Column" widgets
     def createNodeColumnWidget(self, parent_widget: NodeWidget, ref: NodeRef, col:int, graphview:'GraphView'=None) -> CellWidget:
         if not isinstance(parent_widget, NodeWidget):
             raise TypeError("Parent widget must be a NodeWidget")
@@ -97,7 +97,7 @@ class GraphDelegate(QObject):
         # Schedule widget for deletion - this automatically disconnects all signals
         widget.deleteLater()
     
-    # child widgets
+    # child widgets for the nodes
     def createInletWidget(self, parent_widget: InletWidget, index: InletRef, graphview:'GraphView'=None) -> InletWidget:
         if not isinstance(parent_widget, NodeWidget):
             raise TypeError("Parent widget must be a NodeWidget")
