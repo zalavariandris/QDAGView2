@@ -15,12 +15,13 @@ from qdagview2.models.graph_selection_model import GraphSelectionModel
 from qdagview2.views.graph_view import GraphView
 from qdagview2.views.delegates.graph_delegate import GraphDelegate
 
+from qdagview2.proxy_itemmodels.attributes_proxy_itemmodel import AttributesProxyItemModel
+
 class NXNodeInspector(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Node Inspector")
         self.setGeometry(200, 200, 300, 200)
-
 
         layout = QVBoxLayout(self)
         self.label = QLabel("Select a node to see details", self)
@@ -32,8 +33,13 @@ class NXNodeInspector(QWidget):
         self.setLayout(layout)
 
         self._model: NXGraphModel|None = None
+        self._attributes_proxy_model: AttributesProxyItemModel|None = None
         self._model_connections = []
         self._selection_model: GraphSelectionModel|None = None
+
+        attributes_list_view = QListView(self)
+        attributes_list_view.setModel(self._attributes_proxy_model)
+        layout.addWidget(attributes_list_view)
 
     def setModel(self, model:NXGraphModel):
         if self._model is not None:
@@ -49,6 +55,14 @@ class NXNodeInspector(QWidget):
                 (model.attributesDataChanged, self.updateDetails)
             ]
             self._model = model
+
+    def update_attribute_list(self):
+        node = None
+        if self._selection_model is not None:
+            current_ref = self._selection_model.currentIndex()
+            if isinstance(current_ref, NodeRef):
+                node = current_ref
+        self._attributes_proxy_model.setSourceModel(model, node)
 
     def setSelectionModel(self, selection_model:GraphSelectionModel):
         self._selection_model = selection_model
@@ -86,7 +100,6 @@ class NXNodeInspector(QWidget):
                 details.append(f"{name}: {value}")
 
         self.label.setText("\n".join(details))
-
 
 
 class MainWindow(QWidget):
