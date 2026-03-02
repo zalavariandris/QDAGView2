@@ -9,66 +9,33 @@ from qdagview2.models.graph_references import (
 from qdagview2.models.abstract_graph_model import AbstractGraphModel
 
 
-class AttributesProxyItemModel(QAbstractItemModel):
-    sourceModelChanged = Signal()
+class NodeAttributeProxy(QAbstractItemModel):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._source_model:AbstractGraphModel|None = None
-        self._source_item:NodeRef = None
-        self._connections = []
+        self._source_model = None
+        self._root_node = None # The specific NodeRef we want to show
 
-    def setSourceModel(self, source_model:AbstractGraphModel, source_item:NodeRef|OutletRef|InletRef|LinkRef):
-        self._source_item = source_item
-        self._source_model = source_model
-        self.sourceModelChanged.emit()
+    def setRootNode(self, node_ref: NodeRef):
+        self.beginResetModel()
+        self._root_node = node_ref
+        self.endResetModel()
 
-        if self._source_model is not None:
-            for signal, slot in self._connections:
-                signal.disconnect(slot)
-            self._connections = []
+    def rowCount(self, parent=QModelIndex()):
+        # Only the top level (invalid parent) has rows in this view
+        if parent.isValid() or not self._source_model or not self._root_node:
+            return 0
+        return len(self._source_model.attributes(self._root_node))
 
-        if source_model is not None:
-            self._connections = [
-                (source_model.attributesInserted, self.onAttributesChanged),
-                (source_model.attributesRemoved, self.onAttributesChanged),
-                (source_model.attributesDataChanged, self.onAttributesChanged)
-            ]
-            for signal, slot in self._connections:
-                signal.connect(slot)
+    def parent(self, child: QModelIndex = QModelIndex()) -> QModelIndex:
+        # Crucial: Must accept 'child' and return QModelIndex() for a flat list
+        return QModelIndex()
 
-    def onAttributesChanged(self, item_ref, attribute_name):
-        print(f"Attributes changed for {item_ref}, attribute: {attribute_name}")
-        if item_ref == self._source_item:
-            self.layoutChanged.emit()
+    def index(self, row, column, parent=QModelIndex()):
+        return self.createIndex(row, column)
 
-    def sourceModel(self):
-        return self._source_model, self._source_item
-
-    def rowCount(self, parent=None):
-        attributes = self._source_model.attributes(self._source_item)
-        return len(attributes)
-
-    def columnCount(self, parent=None):
-        return 2
-
-    def data(self, index, role=None):
-        if not index.isValid():
-            return None
-        attributes = self._source_model.attributes(self._source_item)
-        if index.row() >= len(attributes):
-            return None
-        attribute_name = attributes[index.row()]
-        if role == Qt.DisplayRole:
-            if index.column() == 0:
-                return attribute_name
-            elif index.column() == 1:
-                return self._source_model.attributeData(self._source_item, attribute_name)
-        return None
-
-    def headerData(self, section, orientation, role=None):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            if section == 0:
-                return "Attribute"
-            elif section == 1:
-                return "Value"
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.DisplayRole and self._root_node:
+            attrs = self._source_model.attributes(self._root_node)
+            attr = attrs[index.row()]
+            return attr._name if index.column() == 0 else self._source_model.attributeData(attr)
         return None

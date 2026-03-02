@@ -15,7 +15,8 @@ from qdagview2.models.graph_selection_model import GraphSelectionModel
 from qdagview2.views.graph_view import GraphView
 from qdagview2.views.delegates.graph_delegate import GraphDelegate
 
-from qdagview2.proxy_itemmodels.attributes_proxy_itemmodel import AttributesProxyItemModel
+from qdagview2.proxy_itemmodels.nodes_proxy_itemmodel import NodesProxyItemModel
+from qdagview2.proxy_itemmodels.links_proxy_itemmodel import LinksProxyItemModel
 
 class NXNodeInspector(QWidget):
     def __init__(self, parent=None):
@@ -33,13 +34,13 @@ class NXNodeInspector(QWidget):
         self.setLayout(layout)
 
         self._model: NXGraphModel|None = None
-        self._attributes_proxy_model: AttributesProxyItemModel|None = None
+        self._nodes_proxy_model: NodesProxyItemModel|None = None
         self._model_connections = []
         self._selection_model: GraphSelectionModel|None = None
 
-        attributes_list_view = QListView(self)
-        attributes_list_view.setModel(self._attributes_proxy_model)
-        layout.addWidget(attributes_list_view)
+        nodes_list_view = QListView(self)
+        nodes_list_view.setModel(self._nodes_proxy_model)
+        layout.addWidget(nodes_list_view)
 
     def setModel(self, model:NXGraphModel):
         if self._model is not None:
@@ -62,7 +63,7 @@ class NXNodeInspector(QWidget):
             current_ref = self._selection_model.currentIndex()
             if isinstance(current_ref, NodeRef):
                 node = current_ref
-        self._attributes_proxy_model.setSourceModel(model, node)
+        self._nodes_proxy_model.setSourceModel(model, node)
 
     def setSelectionModel(self, selection_model:GraphSelectionModel):
         self._selection_model = selection_model
@@ -128,18 +129,27 @@ class MainWindow(QWidget):
         self.graphview1.setModel(self.graph_model)
         self.graphview1.setSelectionModel(self.graph_selection_model)
 
-        # setup node inspector
-        self.node_inspector = NXNodeInspector(parent=self)
-        self.node_inspector.setModel(self.graph_model)
-        self.node_inspector.setSelectionModel(self.graph_selection_model)
+        # setup node list
+        self.nodes_proxy_model = NodesProxyItemModel(parent=self)
+        self.nodes_proxy_model.setSourceModel(self.graph_model)
+        self.node_list_view = QTableView(self)
+        self.node_list_view.setFixedWidth(180)
+        self.node_list_view.setModel(self.nodes_proxy_model)
+
+        # setup link list
+        self.links_proxy_model = LinksProxyItemModel(parent=self)
+        self.links_proxy_model.setSourceModel(self.graph_model)
+        self.link_list_view = QTableView(self)
+        self.link_list_view.setFixedWidth(180)
+        self.link_list_view.setModel(self.links_proxy_model)
 
         # setup layout
         layout = QHBoxLayout(self)
         layout.setMenuBar(self.toolbar)
         layout.addWidget(self.graphview1)
-        layout.addWidget(self.node_inspector)
+        layout.addWidget(self.node_list_view)
+        layout.addWidget(self.link_list_view)
         self.setLayout(layout)
-
 
     def appendNode(self):
         new_node_ref = self.graph_model.addNode()

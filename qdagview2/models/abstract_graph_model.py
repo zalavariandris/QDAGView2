@@ -53,6 +53,7 @@ class AbstractGraphModel(QObject, ABC, metaclass=QABCMeta):
     linksRemoved =   Signal(list) # list of LinkRef
     attributesRemoved = Signal(list) # list of AttributeRef
 
+    
     attributesDataChanged = Signal(list, list) # list of AttributeRef, list of roles
 
     def __init__(self, parent: QObject | None=None):
