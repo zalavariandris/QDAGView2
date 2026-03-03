@@ -89,7 +89,7 @@ class LinkingTool:
                     source_index = self._model.linkSource(link_index)
                     target_index = self._model.linkTarget(link_index)
                     if source_index and source_index.isValid() and target_index and target_index.isValid():
-                        link_widget = cast(LinkWidgetStraight, self._view._widget_manager.getWidget(link_index))
+                        link_widget = cast(LinkWidgetStraight, self._view._row_widget_managet.getWidget(link_index))
                         local_pos = link_widget.mapFromScene(scene_pos)  # Ensure scene_pos is in the correct coordinate system
                         tail_distance = (local_pos-link_widget.line().p1()).manhattanLength()
                         head_distance = (local_pos-link_widget.line().p2()).manhattanLength()
@@ -190,21 +190,21 @@ class LinkingTool:
                 return None
 
 
-        link_widget = self._view._widget_manager.getWidget(link_index) if link_index else self._draft_link
+        link_widget = self._view._row_widget_managet.getWidget(link_index) if link_index else self._draft_link
 
         if outlet_index and inlet_index and self._model.canLink(outlet_index, inlet_index):
-            outlet_widget = self._view._widget_manager.getWidget(outlet_index)
-            inlet_widget = self._view._widget_manager.getWidget(inlet_index)
+            outlet_widget = self._view._row_widget_managet.getWidget(outlet_index)
+            inlet_widget = self._view._row_widget_managet.getWidget(inlet_index)
             line = makeLineBetweenShapes(outlet_widget, inlet_widget)
             line = QLineF(link_widget.mapFromScene(line.p1()), link_widget.mapFromScene(line.p2()))
 
         elif outlet_index:
-            outlet_widget = self._view._widget_manager.getWidget(outlet_index)
+            outlet_widget = self._view._row_widget_managet.getWidget(outlet_index)
             line = makeLineBetweenShapes(outlet_widget, self._view.mapToScene(pos))
             line = QLineF(link_widget.mapFromScene(line.p1()), link_widget.mapFromScene(line.p2()))
 
         elif inlet_index:
-            inlet_widget = self._view._widget_manager.getWidget(inlet_index)
+            inlet_widget = self._view._row_widget_managet.getWidget(inlet_index)
             line = makeLineBetweenShapes(self._view.mapToScene(pos), inlet_widget)
             line = QLineF(link_widget.mapFromScene(line.p1()), link_widget.mapFromScene(line.p2()))
 
@@ -303,7 +303,7 @@ class LinkingTool:
         if self._is_active:
 
             if self._model.itemType(self._linking_payload.index) == GraphItemType.LINK:
-                link_widget = cast(LinkWidgetStraight, self._view._widget_manager.getWidget(self._linking_payload.index))
+                link_widget = cast(LinkWidgetStraight, self._view._row_widget_managet.getWidget(self._linking_payload.index))
                 assert link_widget is not None, "Link widget must not be None"
                 source_widget = self._view._link_manager.getLinkSource(link_widget)
                 target_widget = self._view._link_manager.getLinkTarget(link_widget)

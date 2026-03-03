@@ -119,6 +119,7 @@ class NodeWidget(QGraphicsItem):
         painter.drawRoundedRect(rect, 6, 6)
 
 
+
 if __name__ == "__main__":
     app = QApplication([])
     scene = QGraphicsScene()
