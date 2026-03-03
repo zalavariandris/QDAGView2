@@ -42,6 +42,8 @@ from qdagview2.views.utils.widget_manager_using_bidict import BiDictWidgetManage
 from qdagview2.views.utils.linking_tool import LinkingTool
 
 
+
+
 class GraphView(QGraphicsView):
     def __init__(self, 
                  delegate:GraphDelegate|None=None, 

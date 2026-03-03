@@ -54,7 +54,7 @@ class MainWindow(QWidget):
         self.nodes_proxy_model = NodesProxyItemModel(parent=self)
         self.nodes_proxy_model.setSourceModel(self.graph_model)
         self.node_list_view = QTableView(self)
-        self.node_list_view.setFixedWidth(180)
+        self.node_list_view.setFixedWidth(260)
         self.node_list_view.setModel(self.nodes_proxy_model)
         layout.addWidget(self.node_list_view)
 
